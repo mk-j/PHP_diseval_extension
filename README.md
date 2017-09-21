@@ -6,18 +6,18 @@ yet stable for php7, so we are led to use the diseval extension.
 
 When this php extension is enabled, the following will yield PHP Errors:
 
-```
+```php
 eval("echo 44;");
 ```
 
 PHP Fatal error:  DISEVAL - Use of eval is forbidden by configuration in /path/to/script.php(4) : eval()'d code on line 1
-```
+```php
 $newfunc = create_function('$a,$b', 'return $a+$b;');
 ```
 
 PHP Fatal error:  DISEVAL - Use of eval is forbidden by configuration in /path/to/script.php(4) : runtime-created function on line 1
 
-```
+```php
 echo mb_ereg_replace("[0-3]", '4*4', "4434","e" );
 ```
 
