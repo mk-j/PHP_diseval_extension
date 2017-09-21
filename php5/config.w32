@@ -1,0 +1,10 @@
+// $Id: config.w32,v 1.6 2009-04-06 20:41:21 derick Exp $
+// vim:ft=javascript
+
+ARG_WITH("diseval", "Enable diseval support", "no");
+
+if (PHP_XDEBUG == "yes") {
+    EXTENSION("diseval", "diseval.c");
+    AC_DEFINE("HAVE_XDEBUG", 1, "diseval support");
+}
+
