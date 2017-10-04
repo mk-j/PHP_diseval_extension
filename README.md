@@ -22,3 +22,9 @@ echo mb_ereg_replace("[0-3]", '4*4', "4434","e" );
 ```
 
 PHP Fatal error:  DISEVAL - Use of eval is forbidden by configuration in /path/to/script.php(4) : mbregex replace on line 1
+```php
+$v = array();
+assert('is_array($v)');
+```
+
+PHP Fatal error:  DISEVAL - Use of eval is forbidden by configuration in /path/to/script.php(4) : assert code on line 1
