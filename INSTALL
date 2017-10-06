@@ -1,0 +1,36 @@
+#in ubuntu/debian, try one of
+sudo apt-get install php-dev
+sudo apt-get install php5-dev
+sudo apt-get install php7-dev
+sudo apt-get install php7.0-dev
+sudo apt-get install php7.1-dev
+sudo apt-get install php7.2-dev
+
+#in redhat/centos/fedora, try one of
+yum install php-devel
+
+#then build the extension
+phpize
+./configure
+make
+sudo make install
+
+#this should install diseval.so in a place like: /usr/lib/php/20160303/
+#to enable it, go to php.ini and add
+extension=diseval.so
+
+#or go to something like
+/etc/php/mods-available/
+
+#create a file, diseval.ini
+extension=diseval.so
+
+#and then in one of
+#/etc/php/cli/conf.d
+#/etc/php/fpm/conf.d
+#/etc/php/apache2/conf.d
+ln -s ../../mods-available/diseval.ini
+
+
+
+
