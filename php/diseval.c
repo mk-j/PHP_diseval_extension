@@ -75,7 +75,11 @@ PHP_FUNCTION(diseval_info)
 
 void diseval_execute_ex(zend_execute_data *execute_data TSRMLS_DC)
 {
-	zend_op_array *op_array = execute_data->op_array;
+#if PHP_VERSION_ID >= 70000
+	const zend_op_array *op_array = &execute_data->func->op_array;
+#else
+	const zend_op_array *op_array = execute_data->op_array;
+#endif
 	if (op_array->type == ZEND_EVAL_CODE) {
 		zend_error(E_ERROR, "DISEVAL - Use of eval is forbidden by configuration");
 		zend_bailout();
