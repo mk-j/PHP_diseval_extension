@@ -10,7 +10,7 @@ Release:      %{build_timestamp}%{?dist}
 License:      PHP
 Group:        Development/Languages
 URL:          https://github.com/mk-j/PHP_diseval_extension
-Source:       diseval.tar.gz
+Source:       diseval-%{version}.tar.gz
 BuildRequires: php56-devel
 Requires: php56-common
 Conflicts: php55-diseval
@@ -22,7 +22,7 @@ Conflicts: php72-diseval
 Simple extension to disable eval,create_function, and regex /e modifiers
 
 %prep 
-%setup -q -n diseval
+%setup -q -n diseval-%{version}
 
 cat >diseval.ini << 'EOF'
 ; ----- Enable openssl tools extension module
@@ -46,6 +46,6 @@ install -D -m 644 diseval.ini %{buildroot}%{_sysconfdir}/php/php.d/diseval.ini
 %config(noreplace) %{_sysconfdir}/php/php.d/diseval.ini
 
 %changelog
-* Thu Oct 6 2017 mk-j <mark@zedwood.com> - 0.1
+* Fri Oct 6 2017 mk-j <mark@zedwood.com> - 0.1
 - initial RPM
 
