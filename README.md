@@ -1,8 +1,8 @@
 # PHP diseval extension
 
 The purpose of the diseval php extension is to disable eval in php.
-While suhosin can disable eval, it is not stable for php7.  This 
-extension is able to disable eval in both php5 and php7.
+While suhosin can disable eval in older versions of php.  Diseval 
+is able to disable eval in both php5 and php7 with version 0.1 and php8 in 0.2.
 
 When this php extension is enabled, the following will yield PHP Errors:
 
