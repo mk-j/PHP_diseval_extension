@@ -1,42 +1,43 @@
-/*
- * phpize
- * ./configure
- * make
- * php -dextension=modules/diseval.so -r "diseval_info();";
- **/
+/* diseval extension for PHP */
+
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+# include "config.h"
 #endif
 
 #include "php.h"
-#include "diseval.h"
-#include "zend_compile.h"
 #include "ext/standard/info.h"
+#include "php_diseval.h"
+#include "diseval_arginfo.h"
 
-#ifdef COMPILE_DL_DISEVAL
-ZEND_GET_MODULE(diseval)
+/* For compatibility with older PHP versions */
+#ifndef ZEND_PARSE_PARAMETERS_NONE
+#define ZEND_PARSE_PARAMETERS_NONE() \
+	ZEND_PARSE_PARAMETERS_START(0, 0) \
+	ZEND_PARSE_PARAMETERS_END()
 #endif
 
-void (*zend_execute_old)(zend_execute_data *execute_data TSRMLS_DC);
+void (*zend_execute_old)(zend_execute_data *execute_data);
 
-zend_function_entry diseval_functions[] = {
-	PHP_FE(diseval_info,   0)
-	PHP_FE_END
-};
+/* {{{ void diseval_info() */
+PHP_FUNCTION(diseval_info)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
 
-zend_module_entry diseval_module_entry = {
-	STANDARD_MODULE_HEADER,
-	"diseval",
-	diseval_functions,
-	PHP_MINIT(diseval),
-	PHP_MSHUTDOWN(diseval),
-	PHP_RINIT(diseval),    
-	PHP_RSHUTDOWN(diseval),
-	PHP_MINFO(diseval),    
-	"0.1",
-	STANDARD_MODULE_PROPERTIES
-};
+	php_printf("The extension %s is loaded and working!\r\n", "diseval");
+}
+/* }}} */
 
+
+/* {{{ PHP_RINIT_FUNCTION */
+PHP_RINIT_FUNCTION(diseval)
+{
+#if defined(ZTS) && defined(COMPILE_DL_DISEVAL)
+	ZEND_TSRMLS_CACHE_UPDATE();
+#endif
+
+	return SUCCESS;
+}
+/* }}} */
 
 PHP_MINIT_FUNCTION(diseval)
 {
@@ -58,22 +59,12 @@ PHP_MSHUTDOWN_FUNCTION(diseval)
 	return SUCCESS;
 }
 
-PHP_RINIT_FUNCTION(diseval)
-{
-	return SUCCESS;
-}
 PHP_RSHUTDOWN_FUNCTION(diseval)
 {
 	return SUCCESS;
 }
 
-PHP_FUNCTION(diseval_info)
-{
-	php_printf("DISEVAL Version 0.1\n");
-	RETURN_FALSE;
-}
-
-void diseval_execute_ex(zend_execute_data *execute_data TSRMLS_DC)
+void diseval_execute_ex(zend_execute_data *execute_data)
 {
 #if PHP_VERSION_ID >= 70000
 	const zend_op_array *op_array = &execute_data->func->op_array;
@@ -84,8 +75,27 @@ void diseval_execute_ex(zend_execute_data *execute_data TSRMLS_DC)
 		zend_error(E_ERROR, "DISEVAL - Use of eval is forbidden");
 		zend_bailout();
 	}
-	zend_execute_old(execute_data TSRMLS_CC);
+	zend_execute_old(execute_data);
 }
 
+/* {{{ diseval_module_entry */
+zend_module_entry diseval_module_entry = {
+	STANDARD_MODULE_HEADER,
+	"diseval",					/* Extension name */
+	ext_functions,				/* zend_function_entry */
+	PHP_MINIT(diseval),			/* PHP_MINIT - Module initialization */
+	PHP_MSHUTDOWN(diseval),		/* PHP_MSHUTDOWN - Module shutdown */
+	PHP_RINIT(diseval),			/* PHP_RINIT - Request initialization */
+	PHP_RSHUTDOWN(diseval),		/* PHP_RSHUTDOWN - Request shutdown */
+	PHP_MINFO(diseval),			/* PHP_MINFO - Module info */
+	PHP_DISEVAL_VERSION,		/* Version */
+	STANDARD_MODULE_PROPERTIES
+};
+/* }}} */
 
-
+#ifdef COMPILE_DL_DISEVAL
+# ifdef ZTS
+ZEND_TSRMLS_CACHE_DEFINE()
+# endif
+ZEND_GET_MODULE(diseval)
+#endif
