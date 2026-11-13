@@ -90,5 +90,5 @@ if test "$PHP_DISEVAL" != "no"; then
   dnl In case of no dependencies
   AC_DEFINE(HAVE_DISEVAL, 1, [ Have diseval support ])
 
-  PHP_NEW_EXTENSION(diseval, diseval.c, $ext_shared)
+  PHP_NEW_EXTENSION(diseval, diseval.c, $ext_shared,, -DZEND_ENABLE_STATIC_TSRMLS_CACHE=1)
 fi
