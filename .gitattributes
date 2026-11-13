@@ -1,0 +1,14 @@
+# Strip development-only paths from the archive that Composer downloads
+# (and that PIE uses for `composer-default` source builds).
+/.github        export-ignore
+/.gitattributes export-ignore
+/specs          export-ignore
+/testing        export-ignore
+/tar-it.sh      export-ignore
+
+# Force LF on shell / autoconf / workflow inputs.
+*.sh   text eol=lf
+*.m4   text eol=lf
+*.w32  text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf

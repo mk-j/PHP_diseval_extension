@@ -1,0 +1,9 @@
+ARG PHP=8.3-cli
+FROM php:${PHP}
+WORKDIR /src
+# Alpine images ship without build tools (Debian ones have them); PHPIZE_DEPS is set by the image.
+RUN if command -v apk >/dev/null; then apk add --no-cache bash $PHPIZE_DEPS >/dev/null; fi
+COPY source/ /src/source/
+COPY testing/ /src/testing/
+RUN cd source && phpize >/dev/null && ./configure --enable-diseval >/dev/null && make >/tmp/make.log 2>&1 || { cat /tmp/make.log; exit 1; }; grep -iE "warning:|error:" /tmp/make.log || true
+RUN php -v | head -1 && ./testing/run-tests.sh php /src/source/modules/diseval.so

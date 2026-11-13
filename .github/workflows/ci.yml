@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: php:${{ matrix.php-version }}-${{ matrix.zts-mode == 'ts' && 'zts' || 'cli' }}${{ matrix.distro == 'alpine' && '-alpine' || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        # 8.0 has no prebuilt release binaries (EOL base images) but is still supported
+        # from source. 8.6: RC image until GA, then switch to '8.6'. A missing image tag
+        # fails loudly here on purpose. (php:8.6-rc-cli is itself a ZTS build, so the 8.6 "nts"
+        # cells test ZTS until GA.)
+        php-version: ['8.0', '8.1', '8.2', '8.3', '8.4', '8.5', '8.6-rc']
+        zts-mode: [nts, ts]
+        distro: [debian, alpine]
+        exclude:
+          # JS actions don't run in arm64+musl containers (actions/runner issue).
+          - runner: ubuntu-24.04-arm
+            distro: alpine
+    steps:
+      - name: Install build tooling (Debian)
+        if: matrix.distro == 'debian'
+        # php:8.0 is on Debian 11 (EOL), whose security mirror now 404s: retry without it.
+        run: |
+          PKGS="build-essential autoconf libtool pkg-config zip git ca-certificates"
+          apt-get update && apt-get install -y --no-install-recommends $PKGS || {
+            sed -i '/-security/d' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
+            apt-get update && apt-get install -y --no-install-recommends $PKGS
+          }
+      - name: Install build tooling (Alpine)
+        if: matrix.distro == 'alpine'
+        run: apk add --no-cache bash build-base autoconf libtool m4 pkgconfig zip git
+      # Checkout after git is installed: without git it falls back to a tarball that drops export-ignore'd paths.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build, test and package (same script as the release)
+        env:
+          TAG: ci
+        run: bash .github/scripts/pie-build.sh
+
+  macos:
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: ['8.1', '8.2', '8.3', '8.4', '8.5']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php-version }}
+          tools: none
+        env:
+          phpts: nts
+      - name: Build, test and package (same script as the release)
+        env:
+          TAG: ci
+        run: bash .github/scripts/pie-build.sh
+
+  composer-json:
+    # composer.json must be valid for Packagist/PIE.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.4'
+          tools: composer
+      - run: composer validate --no-check-publish --no-check-lock
