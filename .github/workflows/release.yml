@@ -1,0 +1,173 @@
+name: Build and release PIE binaries
+
+# Release flow, built so that a compromised build step cannot touch the release:
+#   check  -> the tag is a plain X.Y.Z version on the default branch, and no published
+#             release exists for it yet
+#   build  -> one job per platform, read-only token, no secrets; each uploads its zip
+#             as a workflow artifact
+#   publish -> the only job with write access: collects the zips, writes SHA256SUMS,
+#             creates a build-provenance attestation, uploads everything to a draft
+#             release and publishes it (PIE ignores draft releases).
+# Third-party actions are pinned to commit SHAs. The php:* build images are official
+# Docker Library images referenced by tag on purpose, so builds pick up PHP security
+# releases; the attestation records exactly which workflow run built each binary.
+
+on:
+  push:
+    tags: ['[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Tag must be on the default branch and not released yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$TAG" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Tag '$TAG' is not a plain X.Y.Z version"; exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH"; then
+            echo "::error::Tag $TAG ($GITHUB_SHA) is not on $DEFAULT_BRANCH"; exit 1
+          fi
+          # A read-only token only sees published releases, which is exactly what we
+          # must not overwrite. The publish job checks drafts again with write access.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null | grep -qx false; then
+            echo "::error::Release $TAG is already published; its assets are immutable. Tag a new version."; exit 1
+          fi
+
+  build-linux:
+    needs: [check]
+    runs-on: ${{ matrix.runner }}
+    # Build inside the official PHP image so the .so matches the host libc
+    # (glibc on Debian, musl on Alpine; PIE matches on `glibc`/`musl` in the asset name).
+    container:
+      image: php:${{ matrix.php-version }}-${{ matrix.zts-mode == 'ts' && 'zts' || 'cli' }}${{ matrix.distro == 'alpine' && '-alpine' || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        # PHP 8.0 is EOL and its images are on EOL Debian 11 / Alpine 3.16, so no
+        # prebuilt binaries for it: PIE builds 8.0 from source.
+        # 8.6: the RC image until GA (same module API number as GA); switch to '8.6'
+        # once php:8.6-cli exists.
+        php-version: ['8.1', '8.2', '8.3', '8.4', '8.5', '8.6-rc']
+        zts-mode: [nts, ts]
+        distro: [debian, alpine]
+        exclude:
+          # JS actions don't run in arm64+musl containers (actions/runner issue).
+          - runner: ubuntu-24.04-arm
+            distro: alpine
+          # The php:8.6-rc-cli images are ZTS builds, so there is no NTS 8.6 image until GA.
+          - php-version: '8.6-rc'
+            zts-mode: nts
+    steps:
+      - name: Install build tooling (Debian)
+        if: matrix.distro == 'debian'
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends build-essential autoconf libtool pkg-config zip git ca-certificates
+      - name: Install build tooling (Alpine)
+        if: matrix.distro == 'alpine'
+        run: apk add --no-cache bash build-base autoconf libtool m4 pkgconfig zip git
+      # Checkout after git is installed: without git it falls back to a tarball that drops export-ignore'd paths.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build, test, package
+        env:
+          TAG: ${{ github.ref_name }}
+          EXPECT_ZTS: ${{ matrix.zts-mode == 'ts' }}
+        run: bash .github/scripts/pie-build.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.ASSET }}
+          path: dist/${{ env.ASSET }}
+          if-no-files-found: error
+          retention-days: 7
+
+  build-macos:
+    needs: [check]
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS jobs are NTS only (Homebrew PHP doesn't ship ZTS).
+        php-version: ['8.1', '8.2', '8.3', '8.4', '8.5']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php-version }}
+          tools: none
+        env:
+          phpts: nts
+      - name: Build, test, package
+        env:
+          TAG: ${{ github.ref_name }}
+          EXPECT_ZTS: 'false'
+        run: bash .github/scripts/pie-build.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.ASSET }}
+          path: dist/${{ env.ASSET }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write       # create/upload/publish the release
+      id-token: write       # sign the build-provenance attestation
+      attestations: write   # store it
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: php_*.zip
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          ls -1 *.zip
+          sha256sum *.zip > SHA256SUMS
+          cat SHA256SUMS
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*.zip
+      - name: Upload to draft release and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          R=(--repo "$GITHUB_REPOSITORY")
+          if state=$(gh release view "$TAG" "${R[@]}" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$state" != true ]; then
+              echo "::error::Release $TAG is already published; refusing to replace its assets."; exit 1
+            fi
+          else
+            gh release create "$TAG" "${R[@]}" --verify-tag --draft --title "$TAG" --generate-notes
+          fi
+          # --clobber only ever replaces assets of the still-unpublished draft (checked above).
+          gh release upload "$TAG" "${R[@]}" --clobber dist/*.zip dist/SHA256SUMS
+          gh release edit "$TAG" "${R[@]}" --draft=false
+          echo "Published $TAG with $(ls dist/*.zip | wc -l) binaries"

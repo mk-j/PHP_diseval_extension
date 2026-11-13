@@ -159,6 +159,32 @@ run them in Docker for any version:
 
     docker build -f testing/Dockerfile.test --build-arg PHP=8.3-cli .
 
+## Installation with PIE (Composer)
+
+Each GitHub release has prebuilt binaries attached, so no compiler is needed:
+
+* Linux: glibc and musl, x86_64 and arm64 (musl on x86_64 only), NTS and ZTS,
+  PHP 8.1-8.6.
+* macOS: arm64, NTS, PHP 8.1-8.5.
+
+PHP 8.0 is end-of-life, so it gets no prebuilt binaries; PIE builds it from source.
+
+```bash
+pie install mk-j/diseval
+echo "diseval.enabled = 1" >> "$(php -r 'echo PHP_CONFIG_FILE_SCAN_DIR;')/diseval.ini"   # optional, 1 is the default
+```
+
+If there is no matching binary, PIE builds from source, which needs
+`phpize`/`php-dev` and a C compiler. The PIE package does not support Windows.
+
+Every release also carries a `SHA256SUMS` file and a GitHub build-provenance
+attestation for each binary. To check that a zip was built by this repository's
+release workflow:
+
+```bash
+gh attestation verify php_diseval-<version>_php8.4-x86_64-linux-glibc.zip --repo mk-j/PHP_diseval_extension
+```
+
 ## Building
 
 See `INSTALL`: `cd source && phpize && ./configure --enable-diseval && make`.
